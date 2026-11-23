@@ -315,6 +315,7 @@ textarea{min-height:70px;resize:vertical}
     <div class="erp-toolbar">
       <input type="search" id="erp-q" data-i18n-ph="search" placeholder="Buscar cliente, tarea, proyecto…" oninput="renderErp()">
       <span class="erp-note"><i class="ti ti-lock"></i> <span data-i18n="readOnly">Solo lectura — se modifica en el ERP</span></span>
+      <button class="btn hidden" id="btn-hidden" onclick="showHidden=!showHidden;renderErp()"></button>
       <a class="btn" style="margin-left:auto" href="https://bassomarc.github.io/basso-erp-v2/proyectos/" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> <span data-i18n="openErp">Abrir en el ERP</span></a>
     </div>
     <div id="erp-status"></div>
@@ -322,6 +323,7 @@ textarea{min-height:70px;resize:vertical}
     <div class="proj-grid" id="proj-grid"></div>
     <div class="sec-title"><i class="ti ti-list-check"></i> <span data-i18n="erpTasks">Tareas del ERP</span></div>
     <div class="kanban k4" id="erp-kanban"></div>
+    <div id="erp-hidden"></div>
   </div>
 
   <!-- ===== AGENDA ===== -->
@@ -474,7 +476,7 @@ es:{organizer:'Organizador',newTask:'Nueva tarea',exportMonth:'Exportar mes',clo
  saved:'Guardado',syncing:'Sincronizando…',syncErr:'Sin conexión',
  search:'Buscar cliente, tarea, proyecto…',readOnly:'Solo lectura — se modifica en el ERP',openErp:'Abrir en el ERP',activeProjects:'Proyectos activos',erpTasks:'Tareas del ERP',
  e_todo:'Por hacer',e_prog:'En curso',e_stop:'Sin actividad',e_done:'Terminadas',e_todoSub:'Activas, sin jornadas todavía',e_progSub:'Con jornadas en los últimos 7 días',e_stopSub:'Activas, más de 7 días sin jornadas',e_doneSub:'Últimos 30 días',
- showAll:'Ver todas',showLess:'Ver menos',lastDay:'Última jornada',never:'sin jornadas',daysAgo:n=>`hace ${n} día(s)`,todayW:'hoy',
+ showAll:'Ver todas',showLess:'Ver menos',hide:'Ocultar en el Organizador (no cambia el ERP)',restore:'Restaurar',oldTasks:'Antiguas',oldProjects:'Proyectos sin actividad',hideAllOld:'Ocultar todas las antiguas',hiddenBtn:'Ver ocultas',hiddenTitle:'Ocultas en el Organizador',t_hidden:'Ocultado (el ERP no cambia)',t_restored:'Restaurado',confirmHideAll:n=>`¿Ocultar ${n} elemento(s) antiguo(s) en el Organizador? El ERP no se modifica y puedes recuperarlos en «Ver ocultas».`,lastDay:'Última jornada',never:'sin jornadas',daysAgo:n=>`hace ${n} día(s)`,todayW:'hoy',
  project:'Proyecto',service:'Servicio',client:'Cliente',status:'Estado',noProjects:'No hay proyectos activos.',noTasks:'—',erpErr:'No se han podido leer los datos del ERP. El resto del Organizador funciona con normalidad.',
  progress:'Avance',jornadas:'jornadas',noPct:'sin objetivo',
  av:'Avisos',av_today:n=>`<b>${n}</b> cita(s) hoy`,av_urg:n=>`<b>${n}</b> urgente(s)`,av_late:n=>`<b>${n}</b> atrasada(s)`,av_stop:n=>`<b>${n}</b> tarea(s) ERP sin actividad`,av_prev:n=>`<b>${n}</b> trabajo(s) previsto(s) próximos`,
@@ -506,7 +508,7 @@ fr:{organizer:'Organisateur',newTask:'Nouvelle tâche',exportMonth:'Exporter le 
  saved:'Enregistré',syncing:'Synchronisation…',syncErr:'Hors ligne',
  search:'Chercher client, tâche, projet…',readOnly:"Lecture seule — se modifie dans l'ERP",openErp:"Ouvrir dans l'ERP",activeProjects:'Projets en cours',erpTasks:"Tâches de l'ERP",
  e_todo:'À faire',e_prog:'En cours',e_stop:'Sans activité',e_done:'Terminées',e_todoSub:'Actives, aucune journée encore',e_progSub:'Journées dans les 7 derniers jours',e_stopSub:'Actives, plus de 7 jours sans journée',e_doneSub:'30 derniers jours',
- showAll:'Tout voir',showLess:'Voir moins',lastDay:'Dernière journée',never:'aucune journée',daysAgo:n=>`il y a ${n} jour(s)`,todayW:"aujourd'hui",
+ showAll:'Tout voir',showLess:'Voir moins',hide:"Masquer dans l'Organisateur (l'ERP ne change pas)",restore:'Restaurer',oldTasks:'Anciennes',oldProjects:'Projets sans activité',hideAllOld:'Masquer toutes les anciennes',hiddenBtn:'Voir masquées',hiddenTitle:"Masquées dans l'Organisateur",t_hidden:"Masqué (l'ERP ne change pas)",t_restored:'Restauré',confirmHideAll:n=>`Masquer ${n} élément(s) ancien(s) dans l'Organisateur ? L'ERP n'est pas modifié et vous pouvez les récupérer avec « Voir masquées ».`,lastDay:'Dernière journée',never:'aucune journée',daysAgo:n=>`il y a ${n} jour(s)`,todayW:"aujourd'hui",
  project:'Projet',service:'Prestation',client:'Client',status:'Statut',noProjects:'Aucun projet en cours.',noTasks:'—',erpErr:"Impossible de lire les données de l'ERP. Le reste de l'Organisateur fonctionne normalement.",
  progress:'Avancement',jornadas:'journées',noPct:'sans objectif',
  av:'Alertes',av_today:n=>`<b>${n}</b> RDV aujourd'hui`,av_urg:n=>`<b>${n}</b> urgente(s)`,av_late:n=>`<b>${n}</b> en retard`,av_stop:n=>`<b>${n}</b> tâche(s) ERP sans activité`,av_prev:n=>`<b>${n}</b> travail(aux) prévu(s) proche(s)`,
@@ -577,6 +579,8 @@ let tareas=[];      // org_tareas
 let citas=[];       // org_citas
 let meses={};       // org_meses
 let erp={ok:false,loaded:false,proyectos:[],tareas:[],last:{},hasJor:{},avance:{},previstos:[]};
+const OLD_DAYS=60,OLD_PROJ_DAYS=90; // tarea sin actividad > OLD_DAYS / proyecto sin jornadas > OLD_PROJ_DAYS = "antiguo"
+let ocultos={tarea:new Set(),proyecto:new Set()},showHidden=false,showOldT=false,showOldP=false;
 let view='kanban',curMes=mKey(new Date().getFullYear(),new Date().getMonth());
 
 function rowToTask(r){return{id:r.id,mes:r.mes,title:r.titulo,client:r.cliente||'',date:r.fecha||'',col:r.columna,notes:r.notas||'',orden:r.orden||0};}
@@ -603,7 +607,7 @@ async function reloadAll(silent){
 async function loadErp(){
   try{
     const [pr,ta,jo,pv]=await Promise.all([
-      fetchAll((a,b)=>sb.from('proyectos').select('id,nombre,estado,cliente_id,clientes(nombre)').is('borrado_en',null).range(a,b)),
+      fetchAll((a,b)=>sb.from('proyectos').select('id,nombre,estado,cliente_id,creado_en,clientes(nombre)').is('borrado_en',null).range(a,b)),
       fetchAll((a,b)=>sb.from('tareas').select('id,nombre,estado,proyecto_id,creado_en,clientes(nombre),servicios(nombre),proyectos(nombre)').is('borrado_en',null).range(a,b)),
       fetchAll((a,b)=>sb.from('jornadas').select('tarea_id,fecha').is('borrado_en',null).range(a,b)),
       fetchAll((a,b)=>sb.from('trabajos_previstos').select('id,fecha_inicio,fecha_fin,aviso_dias,nota,estado,clientes(nombre),servicios(nombre)').is('borrado_en',null).in('estado',['por_confirmar','confirmado']).range(a,b)),
@@ -615,6 +619,10 @@ async function loadErp(){
       try{const{data}=await sb.rpc('proyecto_avance',{p_proyecto:p.id});avance[p.id]=data&&data[0]||null;}catch(e){}
     }));
     erp={ok:true,loaded:true,proyectos:pr,tareas:ta,last,hasJor:has,avance,previstos:pv};
+    // Ocultos: tabla propia del Organizador (org_ocultos). Si falla, no pasa nada.
+    try{const oc=await fetchAll((a,b)=>sb.from('org_ocultos').select('tipo,ref_id').range(a,b));
+      ocultos={tarea:new Set(oc.filter(x=>x.tipo==='tarea').map(x=>x.ref_id)),proyecto:new Set(oc.filter(x=>x.tipo==='proyecto').map(x=>x.ref_id))};}
+    catch(e){console.warn('org_ocultos',e);}
   }catch(e){erp.ok=false;erp.loaded=true;console.warn('ERP read error',e);}
 }
 
@@ -623,6 +631,24 @@ function erpBucket(t){
   const l=erp.last[t.id];
   if(!l)return'todo';
   return daysBetween(l,todayStr())<=STALE_DAYS?'prog':'stop';
+}
+
+function tOld(t){const l=erp.last[t.id];return erpBucket(t)==='stop'&&!!l&&daysBetween(l,todayStr())>OLD_DAYS;}
+function pOld(p){const av=erp.avance[p.id];const u=av&&av.ultima_fecha;
+  if(u)return daysBetween(u,todayStr())>OLD_PROJ_DAYS;
+  return p.creado_en?daysBetween(String(p.creado_en).slice(0,10),todayStr())>30:false;}
+async function ocultar(tipo,ids){
+  ids=ids.filter(i=>!ocultos[tipo].has(i));if(!ids.length)return;
+  const ok=await write(()=>sb.from('org_ocultos').upsert(ids.map(id=>({tipo,ref_id:id})),{onConflict:'tipo,ref_id',ignoreDuplicates:true}),L('t_hidden'));
+  if(ok){ids.forEach(i=>ocultos[tipo].add(i));renderErp();renderAvisos();}
+}
+async function restaurar(tipo,id){
+  const ok=await write(()=>sb.from('org_ocultos').delete().eq('tipo',tipo).eq('ref_id',id),L('t_restored'));
+  if(ok){ocultos[tipo].delete(id);renderErp();renderAvisos();}
+}
+function ocultarAntiguas(tipo){
+  const ids=(tipo==='tarea'?erp.tareas.filter(t=>t.estado!=='completada'&&!ocultos.tarea.has(t.id)&&tOld(t)):erp.proyectos.filter(p=>p.estado==='activo'&&!ocultos.proyecto.has(p.id)&&pOld(p))).map(x=>x.id);
+  if(!ids.length)return;if(!confirm(L('confirmHideAll')(ids.length)))return;ocultar(tipo,ids);
 }
 
 /* ---- escritura genérica con gestión de errores ---- */
@@ -672,7 +698,7 @@ function avisosData(){
     today:citas.filter(e=>e.date===t&&!e.done).length,
     urg:tareas.filter(x=>x.col==='urgente').length,
     late:tareas.filter(x=>x.date&&x.date<t&&x.col!=='terminado').length,
-    stop:erp.ok?erp.tareas.filter(x=>x.estado!=='completada'&&erpBucket(x)==='stop').length:0,
+    stop:erp.ok?erp.tareas.filter(x=>x.estado!=='completada'&&erpBucket(x)==='stop'&&!ocultos.tarea.has(x.id)&&!tOld(x)).length:0,
     prev:erp.ok?erp.previstos.filter(p=>{const d=daysBetween(t,p.fecha_inicio);return d<=(p.aviso_dias||0);}).length:0,
   };
 }
@@ -839,25 +865,34 @@ function renderErp(){
   if(!erp.ok){st.innerHTML=`<div class="panel late-txt" style="margin-bottom:12px"><i class="ti ti-alert-triangle"></i> ${L('erpErr')}</div>`;document.getElementById('proj-grid').innerHTML='';document.getElementById('erp-kanban').innerHTML='';return;}
   st.innerHTML='';
   const q=document.getElementById('erp-q').value.trim().toLowerCase();
-  const act=erp.proyectos.filter(p=>p.estado==='activo'&&erpMatch(q,p.nombre,p.clientes&&p.clientes.nombre)).sort((a,b)=>(a.clientes?.nombre||'').localeCompare(b.clientes?.nombre||''));
-  document.getElementById('proj-grid').innerHTML=act.length?act.map(p=>{
+  const actAll=erp.proyectos.filter(p=>p.estado==='activo'&&erpMatch(q,p.nombre,p.clientes&&p.clientes.nombre)).sort((a,b)=>(a.clientes?.nombre||'').localeCompare(b.clientes?.nombre||''));
+  const actVis=actAll.filter(p=>!ocultos.proyecto.has(p.id)&&!pOld(p));
+  const actOld=actAll.filter(p=>!ocultos.proyecto.has(p.id)&&pOld(p));
+  const actHid=actAll.filter(p=>ocultos.proyecto.has(p.id));
+  const projCard=(p,hid)=>{
     const av=erp.avance[p.id];const pct=av&&av.pct!=null?Math.max(0,Math.min(100,Number(av.pct))):null;
-    return`<div class="proj" onclick="infoProject('${p.id}')" style="cursor:pointer">
+    return`<div class="proj" onclick="infoProject('${p.id}')" style="cursor:pointer${hid?';opacity:.6':''}">
       <div class="proj-n">${esc(p.nombre)}</div><div class="proj-c"><i class="ti ti-building" style="font-size:10px"></i> ${esc(p.clientes?.nombre||'')}</div>
       <div class="bar"><i style="width:${pct??0}%"></i></div>
       <div class="proj-s"><span>${pct!=null?L('progress')+': <b style="color:var(--gold)">'+pct+' %</b>':L('noPct')}</span><span>${av?av.jornadas+' '+L('jornadas'):''}</span></div>
-      <div class="proj-s"><span>${L('lastDay')}: ${relDay(av&&av.ultima_fecha)}</span></div>
-    </div>`;}).join(''):`<div class="empty">${L('noProjects')}</div>`;
+      <div class="proj-s"><span>${L('lastDay')}: ${relDay(av&&av.ultima_fecha)}</span>${hid
+        ?`<button class="card-btn" title="${esc(L('restore'))}" onclick="event.stopPropagation();restaurar('proyecto','${p.id}')"><i class="ti ti-eye"></i> ${esc(L('restore'))}</button>`
+        :`<button class="card-btn" title="${esc(L('hide'))}" onclick="event.stopPropagation();ocultar('proyecto',['${p.id}'])"><i class="ti ti-eye-off"></i></button>`}</div>
+    </div>`;};
+  document.getElementById('proj-grid').innerHTML=(actVis.length?actVis.map(p=>projCard(p,false)).join(''):`<div class="empty">${L('noProjects')}</div>`)
+    +(actOld.length?`<div style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap"><button class="btn more-btn" style="width:auto" onclick="showOldP=!showOldP;renderErp()">${showOldP?L('showLess'):L('oldProjects')+' ('+actOld.length+')'}</button>${showOldP?`<button class="btn more-btn" style="width:auto" onclick="ocultarAntiguas('proyecto')"><i class="ti ti-eye-off"></i> ${L('hideAllOld')}</button>`:''}</div>`:'')
+    +(showOldP?actOld.map(p=>projCard(p,false)).join(''):'');
   const ts=erp.tareas.filter(t=>erpMatch(q,t.nombre,t.clientes?.nombre,t.servicios?.nombre,t.proyectos?.nombre));
   const B={todo:[],prog:[],stop:[],done:[]};
-  ts.forEach(t=>B[erpBucket(t)].push(t));
+  const H=[];ts.forEach(t=>{if(ocultos.tarea.has(t.id)){H.push(t);return;}B[erpBucket(t)].push(t);});
+  const oldS=B.stop.filter(tOld);B.stop=B.stop.filter(t=>!tOld(t));
   const lastOr=t=>erp.last[t.id]||(t.creado_en||'').slice(0,10);
   B.prog.sort((a,b)=>lastOr(b).localeCompare(lastOr(a)));B.stop.sort((a,b)=>lastOr(a).localeCompare(lastOr(b)));B.done.sort((a,b)=>lastOr(b).localeCompare(lastOr(a)));
   const recentDone=B.done.filter(t=>daysBetween(lastOr(t),todayStr())<=DONE_RECENT);
   const doneList=showAllDone||q?B.done:recentDone;
-  const cols=[['todo','col-hacer','ct-hacer','ti-player-play',B.todo],['prog','col-curso','ct-curso','ti-loader-2',B.prog],['stop','col-stop','ct-stop','ti-alert-triangle',B.stop],['done','col-term','ct-term','ti-check',doneList]];
+  const cols=[['todo','col-hacer','ct-hacer','ti-player-play',B.todo],['prog','col-curso','ct-curso','ti-loader-2',B.prog],['stop','col-stop','ct-stop','ti-alert-triangle',showOldT?B.stop.concat(oldS):B.stop],['done','col-term','ct-term','ti-check',doneList]];
   document.getElementById('erp-kanban').innerHTML=cols.map(([k,cc,ct,ic,list])=>`<div class="col ${cc}">
-    <div class="col-header"><span class="col-title ${ct}"><i class="ti ${ic}"></i> ${L('e_'+k)}</span><span class="col-count">${k==='done'?B.done.length:list.length}</span></div>
+    <div class="col-header"><span class="col-title ${ct}"><i class="ti ${ic}"></i> ${L('e_'+k)}</span><span class="col-count">${k==='done'?B.done.length:k==='stop'?B.stop.length:list.length}</span></div>
     <div class="col-sub">${L('e_'+k+'Sub')}</div>
     ${list.map(t=>`<div class="card ro" onclick="infoTask('${t.id}')">
       <div class="card-title">${esc(t.nombre)}</div>
@@ -866,10 +901,16 @@ function renderErp(){
         ${t.proyectos?`<span><i class="ti ti-briefcase" style="font-size:10px"></i>${esc(t.proyectos.nombre)}</span>`:''}
         <span class="${k==='stop'?'late':''}"><i class="ti ti-clock" style="font-size:10px"></i>${L('lastDay')}: ${relDay(erp.last[t.id])}</span>
       </div>
-      <div class="card-footer"><span class="card-tag tg-erp">ERP${t.servicios?' · '+esc(t.servicios.nombre):''}</span></div>
+      <div class="card-footer"><span class="card-tag tg-erp">ERP${t.servicios?' · '+esc(t.servicios.nombre):''}</span><button class="card-btn" title="${esc(L('hide'))}" onclick="event.stopPropagation();ocultar('tarea',['${t.id}'])"><i class="ti ti-eye-off"></i></button></div>
     </div>`).join('')||`<div class="empty">${L('noTasks')}</div>`}
+    ${k==='stop'&&oldS.length?`<button class="btn more-btn" onclick="showOldT=!showOldT;renderErp()">${showOldT?L('showLess'):L('oldTasks')+' ('+oldS.length+')'}</button>${showOldT?`<button class="btn more-btn" onclick="ocultarAntiguas('tarea')"><i class="ti ti-eye-off"></i> ${L('hideAllOld')}</button>`:''}`:''}
     ${k==='done'&&!q&&B.done.length>recentDone.length?`<button class="btn more-btn" onclick="showAllDone=!showAllDone;renderErp()">${showAllDone?L('showLess'):L('showAll')+' ('+B.done.length+')'}</button>`:''}
   </div>`).join('');
+  const nh=H.length+actHid.length;
+  const bh=document.getElementById('btn-hidden');bh.classList.toggle('hidden',!nh&&!showHidden);bh.innerHTML=`<i class="ti ti-eye${showHidden?'-off':''}"></i> ${L('hiddenBtn')} (${nh})`;
+  document.getElementById('erp-hidden').innerHTML=showHidden&&nh?`<div class="sec-title"><i class="ti ti-eye-off"></i> ${L('hiddenTitle')}</div>
+    ${actHid.length?`<div class="proj-grid">${actHid.map(p=>projCard(p,true)).join('')}</div>`:''}
+    ${H.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:8px">${H.map(t=>`<div class="card ro" style="opacity:.6" onclick="infoTask('${t.id}')"><div class="card-title">${esc(t.nombre)}</div><div class="card-meta">${t.clientes?`<span><i class="ti ti-building" style="font-size:10px"></i>${esc(t.clientes.nombre)}</span>`:''}</div><div class="card-footer"><span class="card-tag tg-erp">ERP${t.servicios?' · '+esc(t.servicios.nombre):''}</span><button class="card-btn" onclick="event.stopPropagation();restaurar('tarea','${t.id}')"><i class="ti ti-eye"></i> ${esc(L('restore'))}</button></div></div>`).join('')}</div>`:''}`:'';
 }
 function showInfo(title,rows,link){
   document.getElementById('i-head').textContent=title;
